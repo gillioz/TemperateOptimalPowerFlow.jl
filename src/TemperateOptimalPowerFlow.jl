@@ -109,7 +109,10 @@ end
 "Assign the production costs from a list"
 function assign_costs!(network::Dict{String,Any}, gen_ids::Vector{String}, costs::Vector{Float64})
     for i = 1:length(gen_ids)
-        network["gen"][gen_ids[i]]["cost"][1] = costs[i]
+		gen_cost = network["gen"][gen_ids[i]]["cost"]
+		if length(gen_cost) > 0
+			gen_cost[1] = costs[i]
+		end
     end
     nothing
 end
