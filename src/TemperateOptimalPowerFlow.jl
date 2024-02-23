@@ -196,7 +196,11 @@ function iterate_dc_opf!(network::Dict{String,Any}, loads::DataFrame, costs::Dat
             continue
         end
         # otherwise, save the production data into the dataframe
-        output[!, column] = [opf_solution["gen"][gen_id]["pg"] for gen_id in list_of_gens]
+        gen_powers = [opf_solution["gen"][gen_id]["pg"] for gen_id in list_of_gens]
+        if network["per_unit"]
+            gen_powers *= network["baseMVA"]
+        end
+        output[!, column] = gen_powers
         # save the dataframe
         if timestep % save_interval == 0
             CSV.write(output_file, output)
