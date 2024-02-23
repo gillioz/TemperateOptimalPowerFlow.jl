@@ -9,7 +9,8 @@ using ProgressMeter
 
 export create_list_of_loads, get_loads_info, create_list_of_gens, get_gens_info
 export assign_loads!, assign_loads_from_file!, assign_costs!, assign_costs_from_file!
-export add_line_costs!, raise_thermal_limit!, iterate_dc_opf, compute_line_rates
+export add_line_costs!, raise_thermal_limit!, assign_ramp_max!, assign_ramp_max_ratio!
+export iterate_dc_opf, compute_line_rates
 export get_optimizer, get_silent_optimizer
 
 
@@ -134,6 +135,42 @@ function assign_costs!(network::Dict{String,Any}, dataframe::DataFrame,  timeste
 end
 
 
+"Assign a maximum ramp value to all generators of a given list of types"
+function assign_ramp_max!(network::Dict{String,Any}, ramp_max_value::Float64, types::Vector{String})
+    for gen in values(network["gen"])
+        if gen["type"] in types
+            gen["ramp_max"] = ramp_max_value
+        end
+    end
+    nothing
+end
+
+
+"Assign a maximum ramp value to all generators of a given type"
+function assign_ramp_max!(network::Dict{String,Any}, ramp_max_value::Float64, type::String)
+    assign_ramp_max!(network, ramp_max_value, [type])
+    nothing
+end
+
+
+"Assign a maximum ramp value to all generators of a given list of types, as a fraction of the max capacity"
+function assign_ramp_max_ratio!(network::Dict{String,Any}, ramp_max_ratio::Float64, types::Vector{String})
+    for gen in values(network["gen"])
+        if gen["type"] in types
+            gen["ramp_max"] = ramp_max_ratio * gen["pmax"]
+        end
+    end
+    nothing
+end
+
+
+"Assign a maximum ramp value to all generators of a given type, as a fraction of the max capacity"
+function assign_ramp_max_ratio!(network::Dict{String,Any}, ramp_max_ratio::Float64, type::String)
+    assign_ramp_max_ratio!(network, ramp_max_ratio, [type])
+    nothing
+end
+
+
 "Raise the thermal limit for all lines by a given factor (by default 10%)"
 function raise_thermal_limit!(network::Dict{String,Any}, factor::Float64 = 1.1)
     for (id, branch) in network["branch"]
@@ -143,11 +180,29 @@ function raise_thermal_limit!(network::Dict{String,Any}, factor::Float64 = 1.1)
 end
 
 
+"""Perform an OPF computation and repeat after raising the thermal limit if it does not converge"""
+function safe_dc_opf!(network::Dict{String,Any}, optimizer, factor::Float64 = 1.1, iterations::Int = 5) :: Dict{String,Any}
+    opf_solution = solve_dc_topf(network, optimizer)["solution"]
+    if length(opf_solution) == 0
+        if iterations > 0
+            println("OPF did not converge: raising the thermal limit")
+            raise_thermal_limit!(network, factor)
+            opf_solution = safe_dc_opf!(network, optimizer, factor, iterations - 1)
+            println("Lowering the thermal limit")
+            raise_thermal_limit!(network, 1.0 / factor)
+        else
+            error("The OPF did not converge even after raising the thermal limit")
+        end
+    end
+    opf_solution
+end
+
+
 """"Perform the OPF computation for each time step, given time series for loads and production costs.
 The production of a given list of generators is recorded into a file. Existing data is not overwritten."""
 function iterate_dc_opf(network::Dict{String,Any}, loads_file::String, costs_file::String,
     output_file::String, optimizer,
-    timesteps_range::UnitRange{Int} = 1:0, save_interval::Int = 150, raise_thermal_limit::Int = 5)
+    timesteps_range::UnitRange{Int} = 1:0, save_interval::Int = 150, ramp_constraint::Bool = true)
     # load time series into memory
     loads = CSV.read(loads_file, DataFrame)
     costs = CSV.read(costs_file, DataFrame)
@@ -161,7 +216,7 @@ function iterate_dc_opf(network::Dict{String,Any}, loads_file::String, costs_fil
 	end
     # call the main function
     iterate_dc_opf!(network, loads, costs, list_of_gens, output, output_file,
-        optimizer, timesteps_range, save_interval, raise_thermal_limit)
+        optimizer, timesteps_range, save_interval, ramp_constraint)
     nothing
 end
 
@@ -169,7 +224,7 @@ end
 """Recursive logic of the function iterate_dc_opf"""
 function iterate_dc_opf!(network::Dict{String,Any}, loads::DataFrame, costs::DataFrame,
     list_of_gens::Vector{String}, output::DataFrame, output_file::String, optimizer,
-    timesteps_range::UnitRange{Int}, save_interval::Int, raise_thermal_limit)
+    timesteps_range::UnitRange{Int}, save_interval::Int, ramp_constraint::Bool)
     # if no range for the timesteps is defined, determine the range from the loads
     timesteps_count = length(timesteps_range)
     if timesteps_count == 0
@@ -177,47 +232,32 @@ function iterate_dc_opf!(network::Dict{String,Any}, loads::DataFrame, costs::Dat
         timesteps_range = 0:timesteps_count - 1
     end
     # loop over all time steps
-    failed_opf_count = 0
     @showprogress for timestep=timesteps_range
-        # if the timestep is already present in the dataframe, then ignore it
+        # if the timestep is already present, throw an error
         column = string(timestep)
         if column in names(output)
-            continue
+            error("Time step $(column) is already present in the data")
         end
         # prepare the network
         assign_loads!(network, loads, timestep)
         assign_costs!(network, costs, timestep)
         # perform OPF computation
-        opf_solution = solve_dc_topf(network, optimizer)["solution"]
-        # if the OPF did not converge, do nothing
-        if length(opf_solution) == 0
-            failed_opf_count += 1
-            println("OPF did not converge at time step ", timestep)
-            continue
-        end
-        # otherwise, save the production data into the dataframe
+        opf_solution = safe_dc_opf!(network, optimizer)
+        # save the production data into the dataframe
         gen_powers = [opf_solution["gen"][gen_id]["pg"] for gen_id in list_of_gens]
         if network["per_unit"]
             gen_powers *= network["baseMVA"]
         end
         output[!, column] = gen_powers
-        # save the dataframe
+        # prepare the network for the next step (for ramp constraints)
+        if ramp_constraint
+            update_data!(network, opf_solution)
+        end
+        # save the dataframe at regular intervals
         if timestep % save_interval == 0
             CSV.write(output_file, output)
         end
     end
-    # determine whether some OPF did not converge, and raise the thermal limit if needed
-    if failed_opf_count > 0
-        println("OPF did not converge for ", failed_opf_count, " time steps")
-        if raise_thermal_limit > 0
-            println(" -> raising the thermal limit")
-            raise_thermal_limit!(network)
-            iterate_dc_opf!(network, loads, costs, list_of_gens, output, output_file, optimizer,
-                timesteps_range, save_interval, raise_thermal_limit - 1)
-            return nothing
-        end
-    end
-    println("OPF converged for ", timesteps_count, " time steps")
     # re-order the columns before saving the result
     columns = names(output)
     columns_int = (t -> parse(Int, t)).(columns[columns .!= "id"])

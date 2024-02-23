@@ -95,6 +95,44 @@ using MathOptInterface
         end
     end
 
+    @testset "test_assign_ramp_max" begin
+        # import a simple model with 3 buses (see PowerModels.jl)
+        network = parse_file("case3.m")
+        @test isa(network, Dict)
+        # assign types to the 3 generators in the network
+        network["gen"]["1"]["type"] = "hydro"
+        network["gen"]["2"]["type"] = "nuclear"
+        network["gen"]["3"]["type"] = "gas"
+        # assign ramp max values for each types 
+        assign_ramp_max!(network, 3.0, "nuclear")
+        assign_ramp_max!(network, 1.0, ["hydro", "gas"])
+        # verify that all generators have now a ramp_max attribute
+        for gen in values(network["gen"])
+            @test haskey(gen, "ramp_max")
+        end
+        # verify that the ramp maxima have been properly assigned
+        @test network["gen"]["1"]["ramp_max"] == 1.0
+        @test network["gen"]["2"]["ramp_max"] == 3.0
+        @test network["gen"]["3"]["ramp_max"] == 1.0
+    end
+
+    @testset "test_assign_ramp_max_ratio" begin
+        # import a simple model with 3 buses (see PowerModels.jl)
+        network = parse_file("case3.m")
+        @test isa(network, Dict)
+        # assign types to the 3 generators in the network
+        for gen in values(network["gen"])
+            gen["type"] = "nuclear"
+        end
+        # assign ramp max values for each types 
+        assign_ramp_max_ratio!(network, 0.1, "nuclear")
+        # verify that all generators have now the correct ramp max attribute
+        for gen in values(network["gen"])
+            @test haskey(gen, "ramp_max")
+            @test abs(gen["ramp_max"] - 0.1 * gen["pmax"]) <= 1e-8
+        end
+    end
+
     @testset "test_get_optimzer" begin
         optimizer = get_optimizer()
         @test isa(optimizer(), Ipopt.Optimizer)
