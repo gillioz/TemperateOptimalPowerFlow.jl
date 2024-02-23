@@ -188,7 +188,7 @@ function iterate_dc_opf!(network::Dict{String,Any}, loads::DataFrame, costs::Dat
         assign_loads!(network, loads, timestep)
         assign_costs!(network, costs, timestep)
         # perform OPF computation
-        opf_solution = solve_dc_opf(network, optimizer)["solution"]
+        opf_solution = solve_dc_topf(network, optimizer)["solution"]
         # if the OPF did not converge, do nothing
         if length(opf_solution) == 0
             failed_opf_count += 1
@@ -231,7 +231,7 @@ end
 
 "Compute the loading rate of all lines in the model"
 function compute_line_rates(network::Dict{String,Any}, optimizer) :: Dict{String, Float64}
-	solution = solve_dc_opf(network, optimizer)["solution"]
+	solution = solve_dc_topf(network, optimizer)["solution"]
 	if length(solution) == 0
 		return Dict{String, Float64}()
 	end
