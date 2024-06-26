@@ -2,14 +2,15 @@ module TemperateOptimalPowerFlowIpoptExt
 
 using TemperateOptimalPowerFlow
 using Ipopt
-using PowerModels
+import MathOptInterface as MOI
+
 
 function TemperateOptimalPowerFlow.get_optimizer()
     Ipopt.Optimizer
 end
 
 function TemperateOptimalPowerFlow.get_silent_optimizer()
-    optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
+    MOI.instantiate(MOI.OptimizerWithAttributes(get_optimizer(), "print_level" => 0))
 end
 
 end # module TemperateOptimalPowerFlowIpoptExt

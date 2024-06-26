@@ -2,7 +2,8 @@ module TemperateOptimalPowerFlowGurobiExt
 
 using TemperateOptimalPowerFlow
 using Gurobi
-using PowerModels
+import MathOptInterface as MOI
+
 
 function __init__()
     global gurobi_env = Gurobi.Env()
@@ -13,7 +14,7 @@ function TemperateOptimalPowerFlow.get_optimizer()
 end
 
 function TemperateOptimalPowerFlow.get_silent_optimizer()
-    optimizer_with_attributes(() -> Gurobi.Optimizer(gurobi_env), "OutputFlag" => 0)
+    MOI.instantiate(MOI.OptimizerWithAttributes(get_optimizer(), "OutputFlag" => 0))
 end
 
 end # module TemperateOptimalPowerFlowGurobiExt
