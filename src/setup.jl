@@ -40,7 +40,7 @@ get_ordered_gen_ids(network::Network) = get_ordered_ids(network, "gen")
 
 
 function setup(output_directory::String, network::Network, loads::AbstractArray{<:Real},
-        nondispatch_ids::Vector{String} = String[],
+        gen_costs::AbstractArray{<:Real}, nondispatch_ids::Vector{String} = String[],
         nondispatch_series::AbstractArray{<:Real} = Real[];
         overwrite::Bool = false)
 
@@ -66,6 +66,7 @@ function setup(output_directory::String, network::Network, loads::AbstractArray{
     T = size(loads, 2)
 
     @assert size(loads) == (N_buses, T)
+    @assert size(gen_costs) == (N_gens, T)
     @assert length(nondispatch_ids) == N_nondispatch
     @assert size(nondispatch_series) == (N_nondispatch, T)
 
@@ -127,7 +128,8 @@ function setup(output_directory::String, network::Network, loads::AbstractArray{
     DataDrop.store_matrix("$(output_directory)/quadratic_cost.h5", quadratic_cost)
 
     @info "Computing linear line costs" _group = ""
-    linear_cost = 2 * LA' * (line_costs .* L * (A_nondispatch * nondispatch_series - loads))
+    linear_cost = 2 * LA' * (line_costs .* L
+        * (A_nondispatch * nondispatch_series - loads)) + gen_costs
     DataDrop.store_matrix("$(output_directory)/linear_line_cost.h5", linear_cost)
 
     @info "Computing total load constraints" _group = ""
