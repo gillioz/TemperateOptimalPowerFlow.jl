@@ -4,7 +4,6 @@ export get_ordered_gen_ids, get_ordered_line_ids, get_ordered_load_ids, get_orde
 
 function import_model(file::String) :: Dict{String, Any}
     return JSON.parsefile(file)
-    # TODO: check the presence of critical elements in the network
 end
 
 
