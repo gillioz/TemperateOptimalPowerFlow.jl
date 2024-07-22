@@ -1,19 +1,15 @@
 export import_model, split_nondispatchable!, get_ordered_gen_ids, setup, scale_down
 
 
-Network = Dict{String, OrderedDict{String, Any}}
+Network = Dict{String, Dict{String, Any}}
 
 
-function import_model(file::String) :: Dict{String, OrderedDict{String, Any}}
+function import_model(file::String) :: Dict{String, Dict{String, Any}}
     network = JSON.parsefile(file)
 
     # TODO: check the presence of critical elements in the network
 
-    return Dict(
-        "bus" => sort(network["bus"]),
-        "gen" => sort(network["gen"]),
-        "branch" => sort(network["branch"])
-        )
+    return Dict(key => network[key] for key in ["bus", "gen", "load", "branch"])
 end
 
 
@@ -21,7 +17,7 @@ function split_nondispatchable!(network::Network, nondisp_ids::Vector{String})
 
     nondisp_ids = intersect(nondisp_ids, keys(network["gen"]))
     if "gen_nd" ∉ keys(network)
-        network["gen_nd"] = OrderedDict{String, Any}()
+        network["gen_nd"] = Dict{String, Any}()
     end
     for id ∈ nondisp_ids
         network["gen_nd"][id] = network["gen"][id]
@@ -59,25 +55,26 @@ function setup(output_directory::String, network::Network, loads::AbstractArray{
 
     @info "Loading network" _group = ""
     N_buses = length(network["bus"])
+    N_loads = length(network["load"])
     N_gens = length(network["gen"])
     N_lines = length(network["branch"])
     N_nondispatch = length(network["gen_nd"])
 
     T = size(loads, 2)
 
-    @assert size(loads) == (N_buses, T)
+    @assert size(loads) == (N_loads, T)
     @assert size(gen_costs) == (N_gens, T)
     @assert length(nondispatch_ids) == N_nondispatch
     @assert size(nondispatch_series) == (N_nondispatch, T)
 
-    bus_ids = collect(keys(network["bus"]))
-    gen_ids = collect(keys(network["gen"]))
-    line_ids = collect(keys(network["branch"]))
-    nondispatch_ids = collect(keys(network["gen_nd"]))
+    bus_ids = get_ordered_ids(network, "bus")
+    gen_ids = get_ordered_ids(network, "gen")
+    load_ids = get_ordered_ids(network, "load")
+    line_ids = get_ordered_ids(network, "branch")
+    nondispatch_ids = get_ordered_ids(network, "gen_nd")
 
-    bus_ids_map = Dict(bus_ids[i] => i for i = 1:N_buses);
-    gen_ids_map = Dict(gen_ids[i] => i for i = 1:N_gens)
-    nondispatch_ids_map = Dict(nondispatch_ids[i] => i for i = 1:N_nondispatch)
+    bus_ids_map = Dict(id => i for (i, id) in enumerate(bus_ids))
+    gen_ids_map = Dict(id => i for (i, id) in enumerate(gen_ids))
 
     @info "Computing susceptance matrix" _group = ""
     # incidence matrix
@@ -88,7 +85,6 @@ function setup(output_directory::String, network::Network, loads::AbstractArray{
     b = [network["branch"][id]["br_b"] for id ∈ line_ids];
     B = M * Diagonal(b)
     DataDrop.store_matrix("$(output_directory)/susceptance.h5", b)
-
 
     @info "Computing PTDF matrix (this may take some time)" _group = ""
     # pseudo-inverse
@@ -102,7 +98,12 @@ function setup(output_directory::String, network::Network, loads::AbstractArray{
     A_gen = sparse(gen_buses, 1:N_gens, ones(N_gens), N_buses, N_gens)
     DataDrop.store_matrix("$(output_directory)/A_gen.h5", A_gen)
 
-    @info "Distributing non-dispatchable generators as loads" _group = "" _group = ""
+    @info "Distributing loads on buses" _group = "" _group = ""
+    load_buses = [bus_ids_map[string(network["load"][id]["load_bus"])] for id ∈ load_ids]
+    A_load = sparse(load_buses, 1:N_loads, ones(N_loads), N_buses, N_loads)
+    DataDrop.store_matrix("$(output_directory)/A_load.h5", A_load)
+
+    @info "Distributing non-dispatchable generators on buses" _group = "" _group = ""
     A_nondispatch = sparse(
         indexin([string(network["gen_nd"][id]["gen_bus"]) for id in nondispatch_ids], bus_ids),
         1:N_nondispatch, ones(N_nondispatch), length(bus_ids), N_nondispatch)
@@ -128,9 +129,12 @@ function setup(output_directory::String, network::Network, loads::AbstractArray{
     DataDrop.store_matrix("$(output_directory)/quadratic_cost.h5", quadratic_cost)
 
     @info "Computing linear line costs" _group = ""
-    linear_cost = 2 * LA' * (line_costs .* L
-        * (A_nondispatch * nondispatch_series - loads)) + gen_costs
+    injections = A_nondispatch * nondispatch_series - A_load * loads
+    linear_cost = 2 * LA' * (line_costs .* L * injections)
     DataDrop.store_matrix("$(output_directory)/linear_line_cost.h5", linear_cost)
+
+    @info "Computing linear generation costs" _group = ""
+    DataDrop.store_matrix("$(output_directory)/linear_gen_cost.h5", gen_costs)
 
     @info "Computing total load constraints" _group = ""
     DataDrop.store_matrix("$(output_directory)/P_load.h5", loads)

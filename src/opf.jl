@@ -270,8 +270,7 @@ function compute(directory::String, result_file::String = "P_result",
         partitions::AbstractVector{<:Integer} = Integer[], noise_factor::Real = 1; kwargs...)
     quadratic_cost = DataDrop.retrieve_matrix("$directory/quadratic_cost.h5")
     line_cost      = DataDrop.retrieve_matrix("$directory/linear_line_cost.h5")
-    # TODO: include gen costs!
-    # gen_cost       = DataDrop.retrieve_matrix("$directory/linear_gen_cost.h5")
+    gen_cost       = DataDrop.retrieve_matrix("$directory/linear_gen_cost.h5")
     P_max          = DataDrop.retrieve_matrix("$directory/P_max.h5")
     P_exp          = DataDrop.retrieve_matrix("$directory/P_exp.h5")
     P_total        = DataDrop.retrieve_matrix("$directory/P_total.h5")
@@ -284,7 +283,7 @@ function compute(directory::String, result_file::String = "P_result",
         ΔP_ramp = Real[]
     end
 
-    linear_cost = line_cost # + noise_factor * gen_cost
+    linear_cost = line_cost + noise_factor * gen_cost
 
     result = (length(partitions) == 0
         ? opf(quadratic_cost, linear_cost,

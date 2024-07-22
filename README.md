@@ -75,12 +75,7 @@ in the Jupyter Notebook
 Installation
 ------------
 
-This package relies on an unregistered fork of PowerModels that needs to be installed first:
-```julia
-] add "https://github.com/gillioz/PowerModels.jl"
-```
-
-Then the package itself can be installed with
+The package can be installed with
 ```julia
 ] add "https://github.com/gillioz/TemperateOptimalPowerFlow.jl"
 ```
