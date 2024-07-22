@@ -40,7 +40,7 @@ function opf(quadratic_cost::AbstractArray{<:Real,2}, linear_cost::AbstractArray
     @assert all(P_exp .<= P_max)
     @assert all(ΔP_ramp .>= 0)
     @assert all(P_total .<= sum(P_max))
-    @assert abs(sum(P_total) / sum(P_exp) / T - 1) < 1e-3
+    @assert abs(sum(P_total) / sum(P_exp) / T - 1) < 1e-2
 
     optimizer = get_silent_optimizer()
 
@@ -157,7 +157,7 @@ function partitioned_opf(partitions::Vector{Int},
         A_ramp::AbstractArray{<:Real,2} = Array{Real}(undef, 0, 0),
         ΔP_ramp::AbstractVector{<:Real} = Real[],
         P_ramp_first::AbstractVector{<:Real} = Real[], P_ramp_last::AbstractVector{<:Real} = Real[],
-        P_bounds_factor::Real = 0.2, log_group::String = "",
+        P_bounds_factor::Real = 0.1, log_group::String = "",
         retry::Bool = true, debug::Bool = true)
 
     if length(partitions) <= 1

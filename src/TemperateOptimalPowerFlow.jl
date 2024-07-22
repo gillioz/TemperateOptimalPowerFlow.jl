@@ -10,6 +10,7 @@ import MathOptInterface as MOI
 
 include("setup.jl")
 include("opf.jl")
+include("analysis.jl")
 include("extensions.jl")
 
 

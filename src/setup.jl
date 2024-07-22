@@ -1,20 +1,14 @@
-export import_model, split_nondispatchable!, get_ordered_gen_ids, setup, scale_down
+export import_model, split_nondispatchable!, setup, scale_down
+export get_ordered_gen_ids, get_ordered_line_ids, get_ordered_load_ids, get_ordered_bus_ids
 
 
-Network = Dict{String, Dict{String, Any}}
-
-
-function import_model(file::String) :: Dict{String, Dict{String, Any}}
-    network = JSON.parsefile(file)
-
+function import_model(file::String) :: Dict{String, Any}
+    return JSON.parsefile(file)
     # TODO: check the presence of critical elements in the network
-
-    return Dict(key => network[key] for key in ["bus", "gen", "load", "branch"])
 end
 
 
-function split_nondispatchable!(network::Network, nondisp_ids::Vector{String})
-
+function split_nondispatchable!(network::Dict{String, Any}, nondisp_ids::Vector{String})
     nondisp_ids = intersect(nondisp_ids, keys(network["gen"]))
     if "gen_nd" ∉ keys(network)
         network["gen_nd"] = Dict{String, Any}()
@@ -27,15 +21,23 @@ function split_nondispatchable!(network::Network, nondisp_ids::Vector{String})
 end
 
 
-function get_ordered_ids(network::Network, key::String)
-    return string.(sort(parse.(Int, keys(network[key]))))
+function sort_strings(strings::Union{AbstractVector{String}, AbstractSet{String}})
+    return string.(sort(parse.(Int, strings)))
 end
 
 
-get_ordered_gen_ids(network::Network) = get_ordered_ids(network, "gen")
+function get_ordered_ids(network::Dict{String, Any}, key::String)
+    return sort_strings(keys(network[key]))
+end
 
 
-function setup(output_directory::String, network::Network, loads::AbstractArray{<:Real},
+get_ordered_gen_ids(network::Dict{String, Any}) = get_ordered_ids(network, "gen")
+get_ordered_bus_ids(network::Dict{String, Any}) = get_ordered_ids(network, "bus")
+get_ordered_load_ids(network::Dict{String, Any}) = get_ordered_ids(network, "load")
+get_ordered_line_ids(network::Dict{String, Any}) = get_ordered_ids(network, "branch")
+
+
+function setup(output_directory::String, network::Dict{String, Any}, loads::AbstractArray{<:Real},
         gen_costs::AbstractArray{<:Real}, nondispatch_ids::Vector{String} = String[],
         nondispatch_series::AbstractArray{<:Real} = Real[];
         overwrite::Bool = false)
@@ -149,6 +151,12 @@ function setup(output_directory::String, network::Network, loads::AbstractArray{
     DataDrop.store_matrix("$(output_directory)/A_ramp.h5", A_ramp)
     ramp_max = [network["gen"][id]["max_ramp_rate"] for id in ramp_gen_ids]
     DataDrop.store_matrix("$(output_directory)/ramp_max.h5", ramp_max)
+
+    @info "Record generators IDs" _group = ""
+    all_gen_ids = vcat(gen_ids, nondispatch_ids)
+    DataDrop.store_matrix("$(output_directory)/gen_ids.h5", all_gen_ids)
+
+    nothing
 end
 
 
@@ -184,14 +192,9 @@ end
 function scale_down(data_directory::String, new_timesteps::Int)
     scale_down_file("$(data_directory)/P_total.h5", new_timesteps)
     scale_down_file("$(data_directory)/linear_line_cost.h5", new_timesteps)
-
-    if isfile("$(data_directory)/linear_gen_cost.h5")
-        scale_down_file("$(data_directory)/linear_gen_cost.h5", new_timesteps)
-    end
+    scale_down_file("$(data_directory)/linear_gen_cost.h5", new_timesteps)
+    scale_down_file("$(data_directory)/P_load.h5", new_timesteps)
+    scale_down_file("$(data_directory)/P_nondispatch.h5", new_timesteps)
 
     nothing
 end
-
-
-# TODO: recombination of dispatchable and non-dispatchable series in one file
-# TODO: export results as dataframe in csv format (both gens and lines)
