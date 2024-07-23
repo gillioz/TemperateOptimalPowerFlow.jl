@@ -44,13 +44,12 @@ function opf(quadratic_cost::AbstractArray{<:Real,2}, linear_cost::AbstractArray
 
     optimizer = get_silent_optimizer()
 
+    @info " -> defining optimisation problem" _group = log_group
     # variables
-    @info " -> defining variables" _group = log_group
     P_vec = MOI.add_variables(optimizer, N * T)
     P = reshape(P_vec, (N, T))
 
     # constraints
-    @info " -> defining constraints" _group = log_group
     MOI.add_constraints(optimizer, P_vec, [MOI.Interval(P_min[i], P_max[i])
         for t = 1:T for i = 1:N])
 
@@ -91,7 +90,6 @@ function opf(quadratic_cost::AbstractArray{<:Real,2}, linear_cost::AbstractArray
         end
     end
 
-    @info " -> computing objective function" _group = log_group
     quadratic_terms = vcat(
         [MOI.ScalarQuadraticTerm(2.0 * quadratic_cost[i,i], P[i, t], P[i, t])
             for i = 1:N for t = 1:T],
