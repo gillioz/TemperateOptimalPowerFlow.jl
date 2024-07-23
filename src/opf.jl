@@ -7,7 +7,7 @@ function opf(quadratic_cost::AbstractArray{<:Real,2}, linear_cost::AbstractArray
         A_ramp::AbstractArray{<:Real,2} = Array{Real}(undef, 0, 0),
         ΔP_ramp::AbstractVector{<:Real} = Real[],
         P_ramp_first::AbstractVector{<:Real} = Real[], P_ramp_last::AbstractVector{<:Real} = Real[],
-        log_group::String = "", retry::Bool = true, debug::Bool = true)
+        log_group::String = "", retry::Bool = true, debug::Bool = true, silent::Bool = true)
 
     N = length(P_max)
     T = length(P_total)
@@ -42,7 +42,7 @@ function opf(quadratic_cost::AbstractArray{<:Real,2}, linear_cost::AbstractArray
     @assert all(P_total .<= sum(P_max))
     @assert abs(sum(P_total) / sum(P_exp) / T - 1) < 1e-2
 
-    optimizer = get_silent_optimizer()
+    optimizer = silent ? get_silent_optimizer() : get_optimizer()
 
     @info " -> defining optimisation problem" _group = log_group
     # variables

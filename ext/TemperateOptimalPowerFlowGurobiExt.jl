@@ -10,11 +10,11 @@ function __init__()
 end
 
 function TemperateOptimalPowerFlow.get_optimizer()
-    () -> Gurobi.Optimizer(gurobi_env)
+    MOI.instantiate(() -> Gurobi.Optimizer(gurobi_env))
 end
 
 function TemperateOptimalPowerFlow.get_silent_optimizer()
-    MOI.instantiate(MOI.OptimizerWithAttributes(get_optimizer(), "OutputFlag" => 0))
+    MOI.instantiate(MOI.OptimizerWithAttributes(() -> Gurobi.Optimizer(gurobi_env), "OutputFlag" => 0))
 end
 
 end # module TemperateOptimalPowerFlowGurobiExt

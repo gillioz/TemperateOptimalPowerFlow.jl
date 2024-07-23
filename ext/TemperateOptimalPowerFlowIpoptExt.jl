@@ -6,11 +6,11 @@ import MathOptInterface as MOI
 
 
 function TemperateOptimalPowerFlow.get_optimizer()
-    Ipopt.Optimizer
+    MOI.instantiate(Ipopt.Optimizer)
 end
 
 function TemperateOptimalPowerFlow.get_silent_optimizer()
-    MOI.instantiate(MOI.OptimizerWithAttributes(get_optimizer(), "print_level" => 0))
+    MOI.instantiate(MOI.OptimizerWithAttributes(Ipopt.Optimizer, "print_level" => 0))
 end
 
 end # module TemperateOptimalPowerFlowIpoptExt
