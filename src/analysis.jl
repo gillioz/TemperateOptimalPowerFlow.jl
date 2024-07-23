@@ -4,9 +4,14 @@ export retrieve_line_flows, retrieve_line_rates, retrieve_line_angles
 export update_network!
 
 
-function retrieve_gen_results(data_directory::String, result_file::String = "P_result",
-        include_nondispatch::Bool = true)
+function retrieve_gen_results(data_directory::String, result_file::String = "P_result";
+        include_nondispatch::Bool = true, zero_small_values::Bool = true, epsilon::Real = 1e-3)
     P_gen = DataDrop.retrieve_matrix("$(data_directory)/$(result_file).h5")
+
+    if zero_small_values
+        P_gen[P_gen .< epsilon] .= 0.0
+    end
+
     if !include_nondispatch
         return P_gen
     end
