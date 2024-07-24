@@ -3,3 +3,6 @@
 
 # Julia
 Manifest.toml
+
+# tests
+test/data

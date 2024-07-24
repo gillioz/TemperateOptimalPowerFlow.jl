@@ -1,157 +1,152 @@
 using Test
-# using PowerModels
 using TemperateOptimalPowerFlow
-# using DataFrames
+using PowerModels
 using Ipopt
-# using MathOptInterface
 
 
 @testset "TemperateOptimalPowerFlow.jl" begin
 
-#     @testset "test_network_import_and_preparation" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # verify presence of branches
-#         @test "branch" in keys(network)
-#         branches = network["branch"]
-#         @test isa(branches, Dict)
-#         @test length(branches) > 0
-#         # verify that branches do not have a "cost" property
-#         for (key, branch) in network["branch"]
-#             @test "cost" ∉ keys(branches)
-#         end
-#         # add a branch cost
-#         cost = 123.4
-#         add_line_costs!(network, cost)
-#         # verify that all branches now have a "cost" property
-#         for (key, branch) in network["branch"]
-#             @test "cost" in keys(branch)
-#             @test branch["cost"] == cost
-#         end
-#     end
-#
-#     @testset "test_create_list_of_loads" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # create a list of loads
-#         @test issetequal(create_list_of_loads(network), ["1", "2", "3"])
-#     end
-#
-#     @testset "test_create_list_of_gens" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # create a list of loads
-#         @test issetequal(create_list_of_gens(network), ["1", "2", "3"])
-#     end
-#
-#     @testset "test_get_loads_info" begin
-#         # import PanTaGruEl
-#         network = parse_file("pantagruel.json")
-#         @test isa(network, Dict)
-#         # create a list of loads
-#         list_of_loads = create_list_of_loads(network)
-#         @test length(list_of_loads) > 0
-#         # get info about the load's country and population
-#         df = get_loads_info(network, list_of_loads, ["country", "load_prop"])
-#         @test isa(df, DataFrame)
-#         # for each country, check that the 'load_prop' adds up to one
-#         countries = unique(df[:, "country"])
-#         for country in countries
-#             @test abs(1.0 - sum(df[df[:, "country"] .== country, "load_prop"])) < 1.0e-6
-#         end
-#     end
-#
-#     @testset "test_get_gens_info" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # create a list of gens
-#         list_of_gens = create_list_of_gens(network)
-#         @test length(list_of_gens) == 3
-#         # get info about the gen's max capacity
-#         df = get_gens_info(network, list_of_gens, ["pmax"])
-#         @test isa(df, DataFrame)
-#         @test issetequal(df[:, "pmax"], [0, 15.0, 20.0])
-#     end
-#
-#     @testset "test_assign_loads" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # verify that the model uses per units
-#         @test network["per_unit"]
-#         @test network["baseMVA"] == 100.0
-#         # create a list of loads
-#         list_of_loads = create_list_of_loads(network)
-#         @test length(list_of_loads) == 3
-#         # create loads in MW
-#         loads = [100.0, 200.0, 300.0]
-#         assign_loads!(network, list_of_loads, loads)
-#         for i = 1:3
-#             @test network["load"][list_of_loads[i]]["pd"] == i
-#         end
-#     end
-#
-#     @testset "test_assign_ramp_max" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # assign types to the 3 generators in the network
-#         network["gen"]["1"]["type"] = "hydro"
-#         network["gen"]["2"]["type"] = "nuclear"
-#         network["gen"]["3"]["type"] = "gas"
-#         # assign ramp max values for each types
-#         assign_ramp_max!(network, 3.0, "nuclear")
-#         assign_ramp_max!(network, 1.0, ["hydro", "gas"])
-#         # verify that all generators have now a ramp_max attribute
-#         for gen in values(network["gen"])
-#             @test haskey(gen, "ramp_max")
-#         end
-#         # verify that the ramp maxima have been properly assigned
-#         @test network["gen"]["1"]["ramp_max"] == 1.0
-#         @test network["gen"]["2"]["ramp_max"] == 3.0
-#         @test network["gen"]["3"]["ramp_max"] == 1.0
-#     end
-#
-#     @testset "test_assign_ramp_max_ratio" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # assign types to the 3 generators in the network
-#         for gen in values(network["gen"])
-#             gen["type"] = "nuclear"
-#         end
-#         # assign ramp max values for each types
-#         assign_ramp_max_ratio!(network, 0.1, "nuclear")
-#         # verify that all generators have now the correct ramp max attribute
-#         for gen in values(network["gen"])
-#             @test haskey(gen, "ramp_max")
-#             @test abs(gen["ramp_max"] - 0.1 * gen["pmax"]) <= 1e-8
-#         end
-#     end
-#
-#     @testset "test_get_optimzer" begin
-#         optimizer = get_optimizer()
-#         @test isa(optimizer(), Ipopt.Optimizer)
-#         silent_optimizer = get_silent_optimizer()
-#         @test isa(silent_optimizer, MathOptInterface.OptimizerWithAttributes)
-#     end
-#
-#     @testset "test_compute_line_rates" begin
-#         # import a simple model with 3 buses (see PowerModels.jl)
-#         network = parse_file("case3.m")
-#         @test isa(network, Dict)
-#         # get optimiser
-#         optimizer = get_silent_optimizer()
-#         # compute line rates
-#         line_rates = compute_line_rates(network, optimizer)
-#         @test length(line_rates) == 3
-#         # verify that all rates are between zero and one
-#         @test all(values(line_rates) .>= -1e6)
-#         @test all(values(line_rates) .<= 1 + 1e6)
-#     end
+    @testset "prepare_model" begin
+        # import MatPower test case
+        network = parse_file("case3.m")
+        @test isa(network, Dict)
+        @test "gen_nd" ∉ keys(network)
+        # prepare the network
+        prepare_model!(network)
+        # check the presence of nondispatchable generators category
+        @test "gen_nd" in keys(network)
+        @test length(network["gen_nd"]) == 0
+        # check the presence of the lines' susceptance
+        for line in values(network["branch"])
+            @test "br_b" in keys(line)
+        end
+        # check the presence of the generators' exprected production and max ramp rate
+        for gen in values(network["gen"])
+            @test "pexp" in keys(gen)
+            @test "max_ramp_rate" in keys(gen)
+        end
+    end
+
+    @testset "split_nondispatchable" begin
+        # import the Swiss model
+        network = import_model("switzerland.json")
+        @test isa(network, Dict)
+        # verify the presence of generators
+        @test "gen" in keys(network)
+        @test "gen_nd" in keys(network)
+        gens = network["gen"]
+        @test isa(gens, Dict)
+        n_gens = length(network["gen"])
+        @test n_gens > 0
+        @test length(network["gen_nd"]) == 0
+        # separate nuclear generators from the rest
+        split_nondispatchable!(network, ["908", "917", "921", "943"])
+        @test length(network["gen"]) == n_gens - 4
+        @test isa(network["gen_nd"], Dict)
+        @test length(network["gen_nd"]) == 4
+    end
+
+    @testset "get_ordered_ids" begin
+        # import MatPower test case
+        network = parse_file("case3.m")
+        @test isa(network, Dict)
+        # get IDS
+        @test get_ordered_gen_ids(network) == ["1", "2", "3"]
+        @test get_ordered_bus_ids(network) == ["1", "2", "3"]
+        @test get_ordered_line_ids(network) == ["1", "2", "3"]
+        @test get_ordered_load_ids(network) == ["1", "2", "3"]
+    end
+
+    @testset "get_optimzer" begin
+        optimizer = get_optimizer()
+        @test isa(optimizer, Ipopt.Optimizer)
+        silent_optimizer = get_silent_optimizer()
+        @test isa(silent_optimizer, Ipopt.Optimizer)
+    end
+
+    @testset "setup" begin
+        # clear data directory
+        dir = "data"
+        if isdir(dir)
+            rm(dir, recursive=true)
+        end
+        # import MatPower test case
+        network = parse_file("case3.m")
+        prepare_model!(network)
+        # create a random time series for the loads and generation costs
+        T = 24
+        loads = 0.9 .+ 0.2 * rand(Float64, (3,T)) # random numbers between 0.9 and 1.1
+        gen_costs = -1.0 .+ 2.0 * rand(Float64, (3,T)) # random numbers between -1 and 1
+        # setup the computation
+        setup(dir, network, loads, gen_costs)
+        # verify the presence of all the relevant files
+        setup_files = ["A_gen.h5", "A_load.h5", "gen_ids.h5", "linear_gen_cost.h5",
+            "linear_line_cost.h5", "P_exp.h5", "P_load.h5", "P_max.h5", "PTDF_matrix.h5",
+            "P_total.h5", "quadratic_cost.h5", "susceptance.h5", "thermal_limits.h5"]
+        @test issetequal(readdir(dir), setup_files)
+        # add ramp constraints to one generator and re-setup the computation
+        network["gen"]["1"]["max_ramp_rate"] = 1.0
+        setup(dir, network, loads, gen_costs, overwrite=true)
+        # verify the presence of all the relevant files
+        setup_files = vcat(setup_files, ["A_ramp.h5", "ramp_max.h5"])
+        @test issetequal(readdir(dir), setup_files)
+        # setup another computation with one non-dispatchable generator
+        split_nondispatchable!(network, ["2"])
+        gen_costs = -1.0 .+ 2.0 * rand(Float64, (2,T)) # random numbers between -1 and 1
+        gen_series = 0.9 .+ 0.2 * rand(Float64, (1,T)) # random numbers between 0.9 and 1.1
+        setup(dir, network, loads, gen_costs, gen_series, overwrite=true)
+        # verify the presence of all the relevant files
+        setup_files = vcat(setup_files, ["A_nondispatch.h5", "P_nondispatch.h5"])
+        @test issetequal(readdir(dir), setup_files)
+        # cleanup
+        rm(dir, recursive=true)
+    end
+
+
+    @testset "compute" begin
+        # clear data directory
+        dir = "data"
+        if isdir(dir)
+            rm(dir, recursive=true)
+        end
+        # import MatPower test case
+        network = parse_file("case3.m")
+        prepare_model!(network)
+        # create a random time series for the loads and generation costs
+        T = 4
+        loads = 0.9 .+ 0.2 * rand(Float64, (3,T)) # random numbers between 0.9 and 1.1
+        gen_costs = -1.0 .+ 2.0 * rand(Float64, (3,T)) # random numbers between -1 and 1
+        # adjust expected production to match the loads
+        gen_ids = get_ordered_gen_ids(network)
+        gen_pmax = [network["gen"][id]["pmax"] for id in gen_ids]
+        total_gen_capacity = sum(gen_pmax)
+        total_load = sum(loads) / T
+        usage = total_load / total_gen_capacity
+        for gen in values(network["gen"])
+            gen["pexp"] = usage * gen["pmax"]
+        end
+        # setup
+        setup(dir, network, loads, gen_costs)
+        # compute
+        compute(dir)
+        # verify the presence of the result file
+        @test isfile("$dir/P_result.h5")
+        # retrieve gen results and verify their validity
+        gens = retrieve_gen_results(dir)
+        @test size(gens) == (3, T)
+        @test all(gens .>= 0)
+        @test all(gens .<= gen_pmax)
+        # verify the energy balance at every bus
+        injections = retrieve_injections(dir)
+        @test all(abs.(sum(injections, dims = 1)) .<= 1e-6)
+        # retrieve line results and verify their validity
+        lines = retrieve_line_flows(dir)
+        @test size(lines) == (3, T)
+        rates = retrieve_line_rates(dir)
+        @test size(lines) == (3, T)
+        @test all(rates .>= 0)
+        # cleanup
+        rm(dir, recursive=true)
+    end
 
 end
