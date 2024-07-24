@@ -12,7 +12,7 @@ function retrieve_gen_results(data_directory::String, result_file::String = "P_r
         P_gen[P_gen .< epsilon] .= 0.0
     end
 
-    if !include_nondispatch
+    if !include_nondispatch || !isfile("$(data_directory)/P_nondispatch.h5")
         return P_gen
     end
     P_nondispatch = DataDrop.retrieve_matrix("$(data_directory)/P_nondispatch.h5")
@@ -31,10 +31,13 @@ end
 function retrieve_injections(data_directory::String, result_file::String = "P_result")
     P_gen = DataDrop.retrieve_matrix("$(data_directory)/$(result_file).h5")
     A_gen = DataDrop.retrieve_matrix("$(data_directory)/A_gen.h5")
-    A_nondispatch = DataDrop.retrieve_matrix("$(data_directory)/A_nondispatch.h5")
-    P_nondispatch = DataDrop.retrieve_matrix("$(data_directory)/P_nondispatch.h5")
     A_load = DataDrop.retrieve_matrix("$(data_directory)/A_load.h5")
     P_load = DataDrop.retrieve_matrix("$(data_directory)/P_load.h5")
+    if !isfile("$(data_directory)/P_nondispatch.h5")
+        return A_gen * P_gen - A_load * P_load
+    end
+    A_nondispatch = DataDrop.retrieve_matrix("$(data_directory)/A_nondispatch.h5")
+    P_nondispatch = DataDrop.retrieve_matrix("$(data_directory)/P_nondispatch.h5")
     return A_gen * P_gen + A_nondispatch * P_nondispatch - A_load * P_load
 end
 

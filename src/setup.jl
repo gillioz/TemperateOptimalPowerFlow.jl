@@ -1,17 +1,38 @@
-export import_model, split_nondispatchable!, setup, scale_down
+export prepare_model!, import_model, split_nondispatchable!, setup, scale_down
 export get_ordered_gen_ids, get_ordered_line_ids, get_ordered_load_ids, get_ordered_bus_ids
 
 
+function prepare_model!(network::Dict{String, Any}, default_pexp::Real = 0.5)
+    # add a list of non-dispatchable generators if it does not exists
+    if "gen_nd" ∉ keys(network)
+        network["gen_nd"] = Dict{String, Any}()
+    end
+    # compute the lines' susceptance
+    for line in values(network["branch"])
+        line["br_b"] = line["br_x"] / (line["br_x"]^2 + line["br_r"]^2)
+    end
+    # add a default value for expected production whenever it is missing
+    for gen in values(network["gen"])
+        if "pexp" ∉ keys(gen)
+            gen["pexp"] = default_pexp * gen["pmax"]
+        end
+        if "max_ramp_rate" ∉ keys(gen)
+            gen["max_ramp_rate"] = 0.0
+        end
+    end
+    nothing
+end
+
+
 function import_model(file::String) :: Dict{String, Any}
-    return JSON.parsefile(file)
+    network = JSON.parsefile(file)
+    prepare_model!(network)
+    return network
 end
 
 
 function split_nondispatchable!(network::Dict{String, Any}, nondisp_ids::Vector{String})
     nondisp_ids = intersect(nondisp_ids, keys(network["gen"]))
-    if "gen_nd" ∉ keys(network)
-        network["gen_nd"] = Dict{String, Any}()
-    end
     for id ∈ nondisp_ids
         network["gen_nd"][id] = network["gen"][id]
         delete!(network["gen"], id)
@@ -37,8 +58,7 @@ get_ordered_line_ids(network::Dict{String, Any}) = get_ordered_ids(network, "bra
 
 
 function setup(output_directory::String, network::Dict{String, Any}, loads::AbstractArray{<:Real},
-        gen_costs::AbstractArray{<:Real}, nondispatch_ids::Vector{String} = String[],
-        nondispatch_series::AbstractArray{<:Real} = Real[];
+        gen_costs::AbstractArray{<:Real}, nondispatch_series::AbstractArray{<:Real} = Real[];
         overwrite::Bool = false)
 
     if isdir(output_directory)
@@ -65,8 +85,9 @@ function setup(output_directory::String, network::Dict{String, Any}, loads::Abst
 
     @assert size(loads) == (N_loads, T)
     @assert size(gen_costs) == (N_gens, T)
-    @assert length(nondispatch_ids) == N_nondispatch
-    @assert size(nondispatch_series) == (N_nondispatch, T)
+    if N_nondispatch > 0
+        @assert size(nondispatch_series) == (N_nondispatch, T)
+    end
 
     bus_ids = get_ordered_ids(network, "bus")
     gen_ids = get_ordered_ids(network, "gen")
@@ -102,14 +123,18 @@ function setup(output_directory::String, network::Dict{String, Any}, loads::Abst
     @info "Distributing loads on buses" _group = "" _group = ""
     load_buses = [bus_ids_map[string(network["load"][id]["load_bus"])] for id ∈ load_ids]
     A_load = sparse(load_buses, 1:N_loads, ones(N_loads), N_buses, N_loads)
+    injections = - A_load * loads
     DataDrop.store_matrix("$(output_directory)/A_load.h5", A_load)
 
-    @info "Distributing non-dispatchable generators on buses" _group = "" _group = ""
-    A_nondispatch = sparse(
-        indexin([string(network["gen_nd"][id]["gen_bus"]) for id in nondispatch_ids], bus_ids),
-        1:N_nondispatch, ones(N_nondispatch), length(bus_ids), N_nondispatch)
-    DataDrop.store_matrix("$(output_directory)/A_nondispatch.h5", A_nondispatch)
-    DataDrop.store_matrix("$(output_directory)/P_nondispatch.h5", nondispatch_series)
+    if N_nondispatch > 0
+        @info "Distributing non-dispatchable generators on buses" _group = "" _group = ""
+        A_nondispatch = sparse(
+            indexin([string(network["gen_nd"][id]["gen_bus"]) for id in nondispatch_ids], bus_ids),
+            1:N_nondispatch, ones(N_nondispatch), length(bus_ids), N_nondispatch)
+        injections = A_nondispatch * nondispatch_series - A_load * loads
+        DataDrop.store_matrix("$(output_directory)/A_nondispatch.h5", A_nondispatch)
+        DataDrop.store_matrix("$(output_directory)/P_nondispatch.h5", nondispatch_series)
+    end
 
     @info "Computing max capacity for each generator" _group = ""
     gen_pmax = [convert(Float64, network["gen"][id]["pmax"]) for id ∈ gen_ids]
@@ -130,7 +155,6 @@ function setup(output_directory::String, network::Dict{String, Any}, loads::Abst
     DataDrop.store_matrix("$(output_directory)/quadratic_cost.h5", quadratic_cost)
 
     @info "Computing linear line costs" _group = ""
-    injections = A_nondispatch * nondispatch_series - A_load * loads
     linear_cost = 2 * LA' * (line_costs .* L * injections)
     DataDrop.store_matrix("$(output_directory)/linear_line_cost.h5", linear_cost)
 
@@ -139,17 +163,21 @@ function setup(output_directory::String, network::Dict{String, Any}, loads::Abst
 
     @info "Computing total load constraints" _group = ""
     DataDrop.store_matrix("$(output_directory)/P_load.h5", loads)
-    total_load = sum(loads, dims=1)[1, :]
-    total_nondispatch = sum(nondispatch_series, dims=1)[1, :]
-    DataDrop.store_matrix("$(output_directory)/P_total.h5", total_load - total_nondispatch)
+    P_total = sum(loads, dims=1)[1, :]
+    if N_nondispatch > 0
+        P_total -= sum(nondispatch_series, dims=1)[1, :]
+    end
+    DataDrop.store_matrix("$(output_directory)/P_total.h5", P_total)
 
     @info "Computing ramp constraints" _group = ""
     ramp_gen_ids = [id for id in gen_ids if network["gen"][id]["max_ramp_rate"] > 0]
     N_ramp = length(ramp_gen_ids)
-    A_ramp = sparse(1:N_ramp, [gen_ids_map[id] for id ∈ ramp_gen_ids], ones(N_ramp), N_ramp, N_gens)
-    DataDrop.store_matrix("$(output_directory)/A_ramp.h5", A_ramp)
-    ramp_max = [network["gen"][id]["max_ramp_rate"] for id in ramp_gen_ids]
-    DataDrop.store_matrix("$(output_directory)/ramp_max.h5", ramp_max)
+    if N_ramp > 0
+        A_ramp = sparse(1:N_ramp, [gen_ids_map[id] for id ∈ ramp_gen_ids], ones(N_ramp), N_ramp, N_gens)
+        DataDrop.store_matrix("$(output_directory)/A_ramp.h5", A_ramp)
+        ramp_max = [network["gen"][id]["max_ramp_rate"] for id in ramp_gen_ids]
+        DataDrop.store_matrix("$(output_directory)/ramp_max.h5", ramp_max)
+    end
 
     @info "Record generators IDs" _group = ""
     all_gen_ids = vcat(gen_ids, nondispatch_ids)
@@ -193,7 +221,9 @@ function scale_down(data_directory::String, new_timesteps::Int)
     scale_down_file("$(data_directory)/linear_line_cost.h5", new_timesteps)
     scale_down_file("$(data_directory)/linear_gen_cost.h5", new_timesteps)
     scale_down_file("$(data_directory)/P_load.h5", new_timesteps)
-    scale_down_file("$(data_directory)/P_nondispatch.h5", new_timesteps)
+    if isfile("$(data_directory)/P_nondispatch.h5")
+        scale_down_file("$(data_directory)/P_nondispatch.h5", new_timesteps)
+    end
 
     nothing
 end
