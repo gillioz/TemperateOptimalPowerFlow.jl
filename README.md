@@ -1,86 +1,49 @@
 TOPF: Temperate Optimal Power Flow
 ==================================
 
-This package relies on a [fork](https://github.com/gillioz/PowerModels.jl)
-of the [PowerModels.jl](https://github.com/lanl-ansi/PowerModels.jl) package
-to perform an Optimal Power Flow (OPF) that disfavors heavily-loaded lines.
-
-In addition to the conventional cost associated with power generation,
-the "temperate" OPF includes a cost proportional to the square of each line's loading rate.
+This package implements a "temperate" Optimal Power Flow (OPF) algorithm
+that dispatches production sources in a power system while disfavoring heavily-loaded lines.
 
 Line cost function
 ------------------
 
+The core of the algorithm is to assign a cost to each line of the power grid
+that is proportional to the square of the line's loading rate.
+In this way, the optimal power flow becomes a convex optimization problem
+that can be solved with standard methods.
+
 Given the power $P_i$ flowing through a line with index $i$,
-and the thermal limit of the line $P_i^{th}$, the loading rate $R_i$ of the line is given by the formula
+and the thermal limit of the line $P_i^{th}$,
+the loading rate $R_i$ of the line is given by the formula
 
 $R_i = | P_i | / P_i^{th}$
 
 We define the cost associated with line $i$ to be the square of the loading rate,
-weighted by the line's thermal limit, and multiplied by a constant $c_i$:
+weighted by the line's thermal limit:
 
-$c_i P_i^{th} R_i^2$
+$P_i^{th} R_i^2$
 
 Using the definition of the loading rate, this is equivalent to:
 
-$c_i P_i^2 / P_i^{th}$
+$P_i^2 / P_i^{th}$
 
-This is independent of the sign of the power $P_i$, which can be positive or negative
-depending on the definition of the line's direction.
-The constant $c_i$ defines the cost per unit of power.
-It is typically the same for all lines of a network.
+This cost is independent of the sign of the power $P_i$, which depends on the line's direction.
 
+Other features
+--------------
 
-Usage
------
+In addition to the quadratic line cost, a conventional, linear production cost can be associated
+with each generator in order to model the contingencies of power production
+and introduce some realistic noise in the optimisation process.
 
-To begin, import a model in [MatPower](https://www.pserc.cornell.edu/matpower/)
-or [PowerModels](https://lanl-ansi.github.io/PowerModels.jl/stable/network-data/) format:
-
-```julia
-using PowerModels
-network = parse_file("test/pantagruel.json")
-```
-
-The model can be modified to add line costs, here specifying a unique cost for all the lines (the constant $c_i$ above):
-```julia
-add_line_costs!(network, 1000)
-```
-
-Time series for all generators of the model can be computed with a (modified) OPF. This can be done with the help of an optimizer such as [Gurobi](https://www.gurobi.com/) (commercial)
-or [Ipopt](https://github.com/coin-or/Ipopt) (open source).
-Note that there is one OPF computation for each time step
-of a whole year, so for large networks this can take quite some time (several hours!):
-```julia
-using Gurobi  # alternatively: using Ipopt
-optimizer = get_silent_optimizer()
-
-iterate_dc_opf(network, "load_series.csv", "gen_cost_series.csv", "gens_list.csv", "output.csv", optimizer)
-```
-
-Besides the network and optimizer objects, the parameters of the function `iterate_dc_opf` are CSV files:
-- "load_series.csv" contains a dataframe whose columns are the time steps of the series
-and whose rows are the loads of the model;
-- "gen_cost_series.csv" contains a similar dataframe, but the rows indicate the variable production cost
-of some or all generators;
-- "output.csv" is the file to which the result of the OPF is written;
-if this file exists already, only missing time steps are added.
-
-A more complete description of the package's possibilities can be found in the
-[PowerData repository](https://github.com/GeeeHesso/PowerData/),
-in the Jupyter Notebook
-[doc/PanTaGruEl_example.ipynb](https://github.com/GeeeHesso/PowerData/blob/main/doc/PanTaGruEl_example.ipynb).
+The TOPF algorithm also supports constraints that ensures a given total production
+over a certain period of time for every individual generator.
 
 
 Installation
 ------------
 
-This package relies on an unregistered fork of PowerModels that needs to be installed first:
-```julia
-] add "https://github.com/gillioz/PowerModels.jl"
-```
-
-Then the package itself can be installed with
+The package can be installed with
 ```julia
 ] add "https://github.com/gillioz/TemperateOptimalPowerFlow.jl"
 ```
@@ -90,3 +53,89 @@ You can test the installation by running
 ] test TemperateOptimalPowerFlow
 ```
 
+
+Usage
+-----
+
+To begin, import a model in [MatPower](https://www.pserc.cornell.edu/matpower/)
+or [PowerModels](https://lanl-ansi.github.io/PowerModels.jl/stable/network-data/) format.
+For instance, working the package's directory, one can use:
+
+```julia
+using TemperateOptimalPowerFlow
+network = import_model("test/switzerland.json")
+```
+
+or
+
+```julia
+using TemperateOptimalPowerFlow, PowerModels
+network = parse_file("test/case3.m")
+prepare_model!(network)
+```
+
+If the model is imported with the *PowerModels* `parse_file` method,
+it is necessary to run the command `prepare_model!` that adds some features to the model.
+In particular, it ensures that the model contains an *expected generation value* `pexp`
+for each generator,  which must be a fraction of the generator's capacity `pmax`
+(if missing, this is set to 50% of the capacity by default).
+
+The optimal power flow computation is then setup with the command
+```julia
+setup(directory, network, loads, gen_costs)
+```
+where
+- `directory` is a path to a directory to be created, in which computation files will be placed;
+- `network` is the network object imported before;
+- `loads` is a matrix that contain time series for each load of the model, arranged as rows;
+- `gen_costs` is a similar matrix with one row for each generator of the model,
+  containing the variable generation cost of that generator.
+
+Several files are generated in the relevant directory.
+To perform the actual optimal power flow computation,
+one needs to import an optimizer such as [Gurobi](https://www.gurobi.com/) (commercial)
+or [Ipopt](https://github.com/coin-or/Ipopt) (open source),
+or otherwise provide a `get_optimizer()` method that returns an optimizer
+in the [MathOptInterface](https://jump.dev/MathOptInterface.jl/stable/) format.
+Then the computation can be launched with
+```julia
+using Ipopt
+compute(directory)
+```
+
+**WARNING**: For large models and/or long time series the computation can be slow (several hours!) and memory-intensive. 
+It is recommended to partition the optimal power flow computation into smaller parts.
+For instance, a time series of 8736 time steps (364 days x 24 hours) can be partitioned into
+52 weeks of 168 time steps using
+```julia
+compute(directory, "P_result_52x168", [52, 168])
+```
+or partitioned further into 13 "months" of 28 days of 24 hours as
+```julia
+compute(directory, "P_result_13x28x24", [13, 28, 24])
+```
+The second argument in both cases indicates the name of the result file.
+
+Once the computation is done, the results can be accessed with
+```julia
+retrieve_gen_results(directory, "P_result_13x28x24")
+```
+returning a matrix of time series in which each row corresponds to a generator of the model.
+The ordered list of generators can be obtained with
+```julia
+get_ordered_gen_ids(network)
+```
+
+Similarly, the power flowing through the lines of the network can be accessed with
+```julia
+retrieve_line_flows(directory, "P_result_13x28x24")
+```
+where the rows correspond to the line IDs of
+```julia
+get_ordered_line_ids(network)
+```
+
+
+
+A more complete description of the package's possibilities can be found in the
+[PowerData repository](https://github.com/GeeeHesso/PowerData/tree/main/run).
