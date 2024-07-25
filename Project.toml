@@ -21,6 +21,7 @@ TemperateOptimalPowerFlowGurobiExt = "Gurobi"
 TemperateOptimalPowerFlowIpoptExt = "Ipopt"
 
 [compat]
+MathOptInterface = "1"
 Gurobi = "1"
 DataDrop = "0.1"
 Ipopt = "1"
