@@ -1,4 +1,5 @@
-export prepare_model!, import_model, split_nondispatchable!, setup, scale_down
+export prepare_model!, import_model, split_nondispatchable!
+export check_balance, balance_model!, setup, scale_down
 export get_ordered_gen_ids, get_ordered_line_ids, get_ordered_load_ids, get_ordered_bus_ids
 
 
@@ -57,9 +58,45 @@ get_ordered_load_ids(network::Dict{String, Any}) = get_ordered_ids(network, "loa
 get_ordered_line_ids(network::Dict{String, Any}) = get_ordered_ids(network, "branch")
 
 
+function check_balance(network::Dict{String, Any}, loads::AbstractArray{<:Real},
+        nondispatch_series::AbstractArray{<:Real} = Real[], epsilon::Float64 = 1e-3) :: Bool
+    production = sum(gen["pexp"] for gen in values(network["gen"]))
+    if length(nondispatch_series) > 0
+        production += sum(nondispatch_series) / size(nondispatch_series, 2)
+    end
+    consumption = sum(loads) / size(loads, 2)
+    @info "Checking balance: $production (production) / $consumption (consumption)" _group = ""
+    return abs(production / consumption - 1) < epsilon
+end
+
+
+function balance_model!(network::Dict{String, Any}, loads::AbstractArray{<:Real},
+        nondispatch_series::AbstractArray{<:Real} = Real[], epsilon::Float64 = 1e-3)
+    gen_ids = get_ordered_gen_ids(network)
+    gen_pmax = [network["gen"][id]["pmax"] for id in gen_ids]
+    total_gen_capacity = sum(gen_pmax)
+    total_load = sum(loads) / size(loads, 2)
+    if length(nondispatch_series) > 0
+        total_load -= sum(nondispatch_series) / size(nondispatch_series, 2)
+    end
+    usage = total_load / total_gen_capacity
+    @info "Balancing expected production at $(usage / 100) % of the total capacity" _group = ""
+    if usage >= 1
+        throw(ErrorException("Total production capacity insufficient to balance the loads"))
+    end
+    for gen in values(network["gen"])
+        gen["pexp"] = usage * gen["pmax"]
+    end
+    nothing
+end
+
+
 function setup(output_directory::String, network::Dict{String, Any}, loads::AbstractArray{<:Real},
         gen_costs::AbstractArray{<:Real}, nondispatch_series::AbstractArray{<:Real} = Real[];
         overwrite::Bool = false)
+    if !check_balance(network, loads, nondispatch_series)
+        throw(ErrorException("The balance between production and consumptions is not respected"))
+    end
 
     if isdir(output_directory)
         if overwrite
@@ -179,7 +216,7 @@ function setup(output_directory::String, network::Dict{String, Any}, loads::Abst
         DataDrop.store_matrix("$(output_directory)/ramp_max.h5", ramp_max)
     end
 
-    @info "Record generators IDs" _group = ""
+    @info "Recording generators IDs" _group = ""
     all_gen_ids = vcat(gen_ids, nondispatch_ids)
     DataDrop.store_matrix("$(output_directory)/gen_ids.h5", all_gen_ids)
 

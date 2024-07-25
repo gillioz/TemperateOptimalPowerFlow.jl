@@ -64,6 +64,21 @@ using Ipopt
         @test isa(silent_optimizer, Ipopt.Optimizer)
     end
 
+    @testset "check_balance" begin
+        # import MatPower test case
+        network = parse_file("case3.m")
+        prepare_model!(network)
+        # create a random time series for the loads and generation costs
+        T = 4
+        loads = 0.9 .+ 0.2 * rand(Float64, (3,T)) # random numbers between 0.9 and 1.1
+        # verify that the power balance is not respected
+        @test !check_balance(network, loads)
+        # adjust expected production to match the loads
+        balance_model!(network, loads)
+        # verify that the power balance is respected
+        @test check_balance(network, loads)
+    end
+
     @testset "setup" begin
         # clear data directory
         dir = "data"
@@ -77,6 +92,8 @@ using Ipopt
         T = 24
         loads = 0.9 .+ 0.2 * rand(Float64, (3,T)) # random numbers between 0.9 and 1.1
         gen_costs = -1.0 .+ 2.0 * rand(Float64, (3,T)) # random numbers between -1 and 1
+        # adjust expected production to match the loads
+        balance_model!(network, loads)
         # setup the computation
         setup(dir, network, loads, gen_costs)
         # verify the presence of all the relevant files
@@ -94,6 +111,7 @@ using Ipopt
         split_nondispatchable!(network, ["2"])
         gen_costs = -1.0 .+ 2.0 * rand(Float64, (2,T)) # random numbers between -1 and 1
         gen_series = 0.9 .+ 0.2 * rand(Float64, (1,T)) # random numbers between 0.9 and 1.1
+        balance_model!(network, loads, gen_series)
         setup(dir, network, loads, gen_costs, gen_series, overwrite=true)
         # verify the presence of all the relevant files
         setup_files = vcat(setup_files, ["A_nondispatch.h5", "P_nondispatch.h5"])
@@ -117,14 +135,7 @@ using Ipopt
         loads = 0.9 .+ 0.2 * rand(Float64, (3,T)) # random numbers between 0.9 and 1.1
         gen_costs = -1.0 .+ 2.0 * rand(Float64, (3,T)) # random numbers between -1 and 1
         # adjust expected production to match the loads
-        gen_ids = get_ordered_gen_ids(network)
-        gen_pmax = [network["gen"][id]["pmax"] for id in gen_ids]
-        total_gen_capacity = sum(gen_pmax)
-        total_load = sum(loads) / T
-        usage = total_load / total_gen_capacity
-        for gen in values(network["gen"])
-            gen["pexp"] = usage * gen["pmax"]
-        end
+        balance_model!(network, loads)
         # setup
         setup(dir, network, loads, gen_costs)
         # compute
@@ -135,6 +146,8 @@ using Ipopt
         gens = retrieve_gen_results(dir)
         @test size(gens) == (3, T)
         @test all(gens .>= 0)
+        gen_ids = get_ordered_gen_ids(network)
+        gen_pmax = [network["gen"][id]["pmax"] for id in gen_ids]
         @test all(gens .<= gen_pmax)
         # verify the energy balance at every bus
         injections = retrieve_injections(dir)
