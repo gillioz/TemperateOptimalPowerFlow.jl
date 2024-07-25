@@ -1,6 +1,9 @@
 TOPF: Temperate Optimal Power Flow
 ==================================
 
+[![Build Status](https://github.com/gillioz/TemperateOptimalPowerFlow.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/gillioz/TemperateOptimalPowerFlow.jl/actions/workflows/CI.yml?query=branch%3Amain)
+
+
 This package implements a "temperate" Optimal Power Flow (OPF) algorithm
 that dispatches production sources in a power system while disfavoring heavily-loaded lines.
 
