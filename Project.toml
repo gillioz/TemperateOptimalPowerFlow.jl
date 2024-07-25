@@ -21,6 +21,7 @@ TemperateOptimalPowerFlowGurobiExt = "Gurobi"
 TemperateOptimalPowerFlowIpoptExt = "Ipopt"
 
 [compat]
+DataDrop = "0.1"
 Ipopt = "1"
 JSON = "0.21"
 
