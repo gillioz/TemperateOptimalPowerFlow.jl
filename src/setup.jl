@@ -80,7 +80,7 @@ function balance_model!(network::Dict{String, Any}, loads::AbstractArray{<:Real}
         total_load -= sum(nondispatch_series) / size(nondispatch_series, 2)
     end
     usage = total_load / total_gen_capacity
-    @info "Balancing expected production at $(usage / 100) % of the total capacity" _group = ""
+    @info "Balancing expected production at $(usage * 100) % of the total capacity" _group = ""
     if usage >= 1
         throw(ErrorException("Total production capacity insufficient to balance the loads"))
     end
