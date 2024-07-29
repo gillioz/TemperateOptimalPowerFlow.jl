@@ -48,7 +48,7 @@ Installation
 
 The package can be installed with
 ```julia
-] add "https://github.com/gillioz/TemperateOptimalPowerFlow.jl"
+] add TemperateOptimalPowerFlow
 ```
 
 You can test the installation by running
