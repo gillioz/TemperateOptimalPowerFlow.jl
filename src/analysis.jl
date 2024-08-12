@@ -1,6 +1,6 @@
 
 export retrieve_gen_results, retrieve_injections, retrieve_loads
-export retrieve_line_flows, retrieve_line_rates, retrieve_line_angles
+export retrieve_line_flows, retrieve_line_angles
 export update_network!
 
 
@@ -42,24 +42,27 @@ function retrieve_injections(data_directory::String, result_file::String = "P_re
 end
 
 
-function retrieve_line_flows(data_directory::String, result_file::String = "P_result")
+function retrieve_line_flows(data_directory::String, result_file::String = "P_result";
+        absolute::Bool = false, relative::Bool = false)
     P = retrieve_injections(data_directory, result_file)
     L = DataDrop.retrieve_matrix("$(data_directory)/PTDF_matrix.h5")
-    return L * P
+    flows = L * P
+    if absolute
+        flows = abs.(flows)
+    end
+    if relative
+        thermal_limits = DataDrop.retrieve_matrix("$(data_directory)/thermal_limits.h5")
+        flows = flows ./ thermal_limits
+    end
+    return flows
 end
 
 
-function retrieve_line_rates(data_directory::String, result_file::String = "P_result")
-    flows = retrieve_line_flows(data_directory, result_file)
-    thermal_limits = DataDrop.retrieve_matrix("$(data_directory)/thermal_limits.h5")
-    return abs.(flows) ./ thermal_limits
-end
-
-
-function retrieve_line_angles(data_directory::String, result_file::String = "P_result")
-    flows = retrieve_line_flows(data_directory, result_file)
+function retrieve_line_angles(data_directory::String, result_file::String = "P_result";
+        absolute::Bool = false)
+    flows = retrieve_line_flows(data_directory, result_file, absolute = absolute)
     susceptance = DataDrop.retrieve_matrix("$(data_directory)/susceptance.h5")
-    return abs.(flows) ./ susceptance
+    return flows ./ susceptance
 end
 
 

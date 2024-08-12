@@ -1,7 +1,7 @@
 name = "TemperateOptimalPowerFlow"
 uuid = "f1e0c8a6-be03-497e-b6ff-c3d2eb1ec690"
 authors = ["Marc Gillioz"]
-version = "0.2.0"
+version = "0.2.1"
 
 [deps]
 DataDrop = "aa547a04-dd37-49ab-8e73-656744f8a8fc"

@@ -153,11 +153,19 @@ using Ipopt
         injections = retrieve_injections(dir)
         @test all(abs.(sum(injections, dims = 1)) .<= 1e-6)
         # retrieve line results and verify their validity
-        lines = retrieve_line_flows(dir)
-        @test size(lines) == (3, T)
-        rates = retrieve_line_rates(dir)
-        @test size(lines) == (3, T)
-        @test all(rates .>= 0)
+        flows = retrieve_line_flows(dir)
+        @test size(flows) == (3, T)
+        flows = retrieve_line_flows(dir, absolute = true)
+        @test size(flows) == (3, T)
+        @test all(flows .>= 0)
+        flows = retrieve_line_flows(dir, absolute = true, relative = true)
+        @test size(flows) == (3, T)
+        @test all(flows .>= 0)
+        @test all(flows .<= 2)
+        angles = retrieve_line_angles(dir, absolute = true)
+        @test size(angles) == (3, T)
+        @test all(angles .>= 0)
+        @test all(angles .<= 1.57) # pi / 2
         # cleanup
         rm(dir, recursive=true)
     end
