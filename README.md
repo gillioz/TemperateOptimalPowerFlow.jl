@@ -37,7 +37,7 @@ Other features
 
 In addition to the quadratic line cost, a conventional, linear production cost can be associated
 with each generator in order to model the contingencies of power production
-and introduce some realistic noise in the optimisation process.
+and introduce some realistic noise in the optimization process.
 
 The TOPF algorithm also supports constraints that ensures a given total production
 over a certain period of time for every individual generator.

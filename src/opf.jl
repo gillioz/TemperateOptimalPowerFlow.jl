@@ -44,7 +44,7 @@ function opf(quadratic_cost::AbstractArray{<:Real,2}, linear_cost::AbstractArray
 
     optimizer = silent ? get_silent_optimizer() : get_optimizer()
 
-    @info " -> defining optimisation problem" _group = log_group
+    @info " -> defining optimization problem" _group = log_group
     # variables
     P_vec = MOI.add_variables(optimizer, N * T)
     P = reshape(P_vec, (N, T))

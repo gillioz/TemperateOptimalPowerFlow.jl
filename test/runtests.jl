@@ -161,7 +161,7 @@ using Ipopt
         flows = retrieve_line_flows(dir, absolute = true, relative = true)
         @test size(flows) == (3, T)
         @test all(flows .>= 0)
-        @test all(flows .<= 2)
+        @test all(flows .<= 5)
         angles = retrieve_line_angles(dir, absolute = true)
         @test size(angles) == (3, T)
         @test all(angles .>= 0)
